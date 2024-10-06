@@ -1,0 +1,69 @@
+---
+title: "Philadelphia Housing price predection"
+author:"jijin Chen"
+output: html_document
+date: "2024-10-04"
+---
+# Introduction
+
+The purpose of this project is to create a predictive model that leverages comprehensive datasets from various sources, including Philadelphia’s Open Data portal and Tigris, to enhance the accuracy of home price predictions. By focusing on local factors and features that impact property values, the team aims to deliver insights that can significantly inform Zillow's pricing strategies.
+
+There are particular challenges associated with this exercise. First, the intricacies of the Philadelphia housing market require a nuanced understanding of various local variables, such as neighborhood characteristics, amenities, and spatial structures. Second, the analysis is limited to using Ordinary Least Squares (OLS) regression for the modeling approach, which, while foundational, may not capture complex nonlinear relationships as effectively as other algorithms. Thus, the modeling strategy involves meticulous feature selection and engineering to optimize the predictive power of the OLS regression model.
+
+This report will detail the data gathering methods, present the summary statistics, and explore the correlations among key variables. Additionally, the findings will be visualized through various maps and scatterplots to provide a clear narrative that supports the analytical insights. By the conclusion of this project, the aim is not only to generate accurate predictions but also to foster a deeper understanding of the factors influencing housing prices in Philadelphia, ultimately guiding Zillow in enhancing its market predictions.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(sf)
+library(spdep)
+library(caret)
+library(ckanr)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(ggcorrplot)
+library(jtools)     # for regression model plots
+library(broom)
+library(tufte)
+library(rmarkdown)
+library(pander)
+library(tidycensus)
+
+```
+
+#Data
+
+
+#Methods
+This section outlines the methods employed in the project to develop a predictive model for home prices in Philadelphia using Ordinary Least Squares (OLS) regression. The methodology encompasses data collection, preprocessing, feature selection, and model evaluation.
+
+Data was gathered from various sources to ensure a comprehensive analysis of the factors influencing home prices in Philadelphia. Primary datasets were obtained from the Philadelphia Open Data Portal and Tigris, which provided access to various datasets related to housing, demographics, and public amenities. These datasets included variables such as property characteristics, neighborhood amenities, and demographic information, allowing for a multifaceted approach to predicting home prices.
+
+Once the datasets were acquired, the data underwent a cleaning process to address any missing or erroneous values. This included removing duplicates and handling missing data using imputation techniques where appropriate. Certain variables were transformed to ensure they met the assumptions of OLS regression, such as converting categorical variables into factor types and standardizing continuous variables when necessary. Additionally, new features were created based on existing data to enhance the model's predictive power. This included creating interaction terms between variables and deriving spatial features, such as proximity to public amenities or average home prices within neighborhoods.
+
+The team employed a systematic approach to feature selection, focusing on variables that were expected to influence home prices based on domain knowledge and exploratory data analysis. A correlation matrix was generated to identify relationships between variables and the target variable (sale price), allowing the team to consider variables with high correlation coefficients for inclusion in the model. Selected variables were also visualized through scatterplots to assess their relationships with home prices, helping to identify potential outliers and the nature of these relationships. To ensure model stability, the Variance Inflation Factor (VIF) was calculated to check for multicollinearity among the selected features, with variables exhibiting high VIF values considered for removal.
+
+The primary modeling approach utilized was Ordinary Least Squares (OLS) regression. The dataset was divided into a training set and a test set, with the "MODELLING" subset used for training and validation, ensuring that the model could be evaluated on unseen data. The OLS regression model was then fitted to the training data using the selected features, and the model's coefficients were estimated to quantify the relationship between the predictors and the target variable. Evaluation of the model involved various metrics, including R-squared, Mean Absolute Error (MAE), and Mean Absolute Percentage Error (MAPE). Cross-validation techniques were employed to assess the model's generalizability and avoid overfitting. Following the model fitting, residuals were analyzed to check for patterns indicating model inadequacies, which included plotting residuals against predicted values to assess homoscedasticity and conducting Moran’s I test to evaluate spatial autocorrelation in the residuals.
+
+Throughout the analysis, various visualizations were generated to effectively communicate the findings. Summary statistics tables presented descriptive statistics for the selected variables, while correlation matrices and scatterplots illustrated relationships between key variables. Additionally, maps were created to visualize spatial distributions of home prices and relevant independent variables. By employing these methods, the project aims to build a robust predictive model that effectively captures the complexities of the Philadelphia housing market, ultimately providing Zillow with improved pricing strategies.
+
+#Results
+
+
+#Discussion
+
+
+#Conclusion
+In conclusion
+
+
+
+
+
+
+
+
+
+
