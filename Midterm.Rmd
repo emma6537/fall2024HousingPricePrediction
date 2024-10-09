@@ -32,7 +32,7 @@ library(dplyr)
 library(RColorBrewer)
 library(classInt)
 library(kableExtra)
-
+library(tidycensus)
 #library(geojsonio)
 
 root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
@@ -113,7 +113,7 @@ bikestations.f = bikestations %>%
   select(id, name, addressStreet, addressZipCode, latitude, longitude, coordinates, geometry)
 
 studentdata.f = studentdata %>%
-  dplyr::select(objectid, basements, geometry, census_tract, category_code, central_air, fireplaces, fuel, garage_type, interior_condition, location, number_of_bedrooms, number_of_bathrooms, number_stories, number_of_rooms, quality_grade, state_code, street_code, sale_price, sale_date, sale_year, total_livable_area, type_heater, total_area, unfinished, unit, view_type, year_built, zip_code, toPredict) %>%
+  dplyr::select(objectid, basements, geometry, census_tract, category_code, central_air, fireplaces, fuel, garage_type, interior_condition, location, number_of_bedrooms, number_of_bathrooms, number_stories, number_of_rooms, parcel_number, quality_grade, state_code, street_code, sale_price, sale_date, sale_year, total_livable_area, type_heater, total_area, unfinished, unit, view_type, year_built, zip_code, toPredict) %>%
   mutate(incBasements = case_when(
           !is.na(basements) & basements != 0 ~ "Y", TRUE~ "N"),
         incAC = case_when(
@@ -397,7 +397,7 @@ testingmodel = modellingdata[-split_index, ] %>%
 
 ```{r training regression}
 trReg <- lm(sale_price ~ ., data = trainingmodel %>% st_drop_geometry() %>% 
-                                 dplyr::select(sale_price, age, totRooms, incBasements, incAC, buildingQuality, incGarage, stories, scenery))
+                                 dplyr::select(sale_price, age, totRooms, incBasements, incAC, buildingQuality, incGarage, stories, scenery, maxArea, farmersmarket.d.ft, schools.c, hospital.d.ft, bikestations.c, parks.d.ft))
 
 trRegSummary <- summary(trReg)
 coTable <- as.data.frame(trRegSummary$coefficients)
@@ -416,7 +416,7 @@ coTable %>%
   footnote(general_title = "\n", general = "Table 1")
 ```
 
-```{r}
+```{r regression of training model}
 trainingReg <- lm(sale_price ~ ., data = trainingmodel %>% 
                     st_drop_geometry() %>% 
                     dplyr::select(sale_price, age, totRooms, incBasements, incAC, incGarage, buildingQuality, stories, maxArea, farmersmarket.d.ft, schools.c, hospital.d.ft, bikestations.c, parks.d.ft))
@@ -462,10 +462,10 @@ theme(plot.subtitle = element_text(size = 9,face = "italic"),
         axis.title=element_text(size=8))
 ```
 
-```{r}
-fitControl <- trainControl(method = "cv", number = 100)
+```{r fit control}
+fitControl = trainControl(method = "cv", number = 100)
 
-cvReg <- 
+cvReg = 
   train(sale_price ~ ., data = st_drop_geometry(studentdata.f) %>% 
                              dplyr::select(sale_price, age, totRooms, incBasements, incAC, incGarage, buildingQuality, stories, maxArea, farmersmarket.d.ft, schools.c, hospital.d.ft, bikestations.c, parks.d.ft), method = "lm", trControl = fitControl, na.action = na.pass)
 
@@ -475,6 +475,150 @@ cvReg$resample %>%
 ) %>%
   kbl(col.name=c('Mean Absolute Error','Standard Deviation of MAE')) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
-  footnote(general_title = "\n", general = "Table 15")
+  footnote(general_title = "\n", general = "Table 3")
 ```
 
+# Adding Census Data
+
+```{r census key, include=FALSE, eval=FALSE}
+census_api_key("0e028dfcee38f844e89c39d01870f6a964f675a2", overwrite = TRUE, install = TRUE)
+```
+
+```{r adding spatial features}
+acs20 = 
+  get_acs(geography = "tract", 
+          variables = c("B02001_001E", 
+            "B02001_002E", 
+            "B02001_003E", 
+            "B02001_005E", 
+            "B03002_012E",
+            "B19013_001E"), 
+          year=2020, state=42, county=101, 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:6565') %>% 
+  rename(totPop = B02001_001E, 
+         white = B02001_002E,
+         black = B02001_003E,
+         asian = B02001_005E,
+         hispanic = B03002_012E,
+         medHHIncome = B19013_001E) %>% 
+  mutate(pctMinority = ifelse(totPop > 0, (black + asian + hispanic ) / totPop, 0), 
+         majority = ifelse(pctMinority > 0.5, "minority", "majority"))
+
+joinrace = studentdata.f %>% 
+  st_intersection(acs20 %>% select(pctMinority)) %>% 
+  st_drop_geometry() %>% 
+  group_by(parcel_number) %>% 
+  summarize(
+    minority.m = mean(pctMinority))
+joinHHinc = studentdata.f %>%
+  st_intersection(acs20 %>% select(medHHIncome)) %>%
+  st_drop_geometry() %>%
+  group_by(parcel_number) %>%
+  summarize(
+    medHHInc = medHHIncome
+  )
+
+studentdata.sp = studentdata.f %>% 
+  left_join(joinrace, by = "parcel_number") %>%
+  left_join(joinHHinc, by = "parcel_number")
+```
+
+```{r split spatial}
+modellingdata.sp = studentdata.sp %>%
+  filter(toPredict == 'MODELLING') 
+
+
+challengedata.sp = studentdata.sp %>%
+  filter(toPredict == 'CHALLENGE')
+
+set.seed(1111) 
+total_features = nrow(modellingdata.sp)
+split_index = sample(1:total_features, size = total_features * 0.6)
+
+
+trainingmodel.sp = modellingdata.sp[split_index, ] 
+testingmodel.sp = modellingdata.sp[-split_index, ] %>%
+  select(-sale_price)
+```
+
+```{r spatial table}
+reg2 <- lm(sale_price ~ ., data = studentdata.sp %>% st_drop_geometry() %>% 
+                                 dplyr::select(sale_price, age, totRooms, incBasements, incAC, buildingQuality, incGarage, stories, scenery, maxArea, farmersmarket.d.ft, schools.c, hospital.d.ft, bikestations.c, parks.d.ft, minority.m, medHHInc))
+summary_reg2 <- summary(reg2)
+coefficients_table <- as.data.frame(summary_reg2$coefficients)
+
+
+coefficients_table$significance <- ifelse(coefficients_table$`Pr(>|t|)` < 0.001, '***',
+                                         ifelse(coefficients_table$`Pr(>|t|)` < 0.01, '**',
+                                                ifelse(coefficients_table$`Pr(>|t|)` < 0.05, '*',
+                                                       ifelse(coefficients_table$`Pr(>|t|)` < 0.1, '.', ''))))
+
+coefficients_table$p_value <- paste0(round(coefficients_table$`Pr(>|t|)`, digits = 3), coefficients_table$significance)
+
+coefficients_table %>%
+  select(-significance, -`Pr(>|t|)`) %>% 
+  kable(align = "r") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  footnote(general_title = "\n", general = "Table 4")
+```
+
+```{r}
+reg2.sumtable <- data.frame(
+  Statistic = c("Multiple R-squared", "Adjusted R-squared", "F-statistic"),
+  Value = c(
+    summary_reg2$r.squared,
+    summary_reg2$adj.r.squared,
+    summary_reg2$fstatistic[1]
+  )
+)
+
+reg2.sumtable %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))%>%
+  footnote(general_title = "\n", general = "Table 5")
+```
+
+```{r regression of training model for spatial}
+trainingReg.sp <- lm(sale_price ~ ., na.action = na.omit, data = trainingmodel.sp %>% 
+                      st_drop_geometry() %>% 
+                    dplyr::select(sale_price, age, totRooms, incBasements, incAC, incGarage, buildingQuality, stories, maxArea, farmersmarket.d.ft, schools.c, hospital.d.ft, bikestations.c, parks.d.ft, minority.m, medHHInc))
+
+trainingmodel.sp.m = 
+  trainingmodel.sp %>% 
+  mutate(Regression = "BASE", 
+    SalePrice.Predict = predict(trainingReg.sp, trainingmodel.sp),
+         SalePrice.Error = SalePrice.Predict - sale_price,
+         SalePrice.AbsError = abs(SalePrice.Predict - sale_price),
+         SalePrice.APE = (abs(SalePrice.Predict - sale_price)) / SalePrice.Predict)
+
+trainingmodel.sp.m %>% 
+  st_drop_geometry() %>%
+  summarise(MAE = mean(SalePrice.AbsError, na.rm=TRUE),
+            MAPE = mean(SalePrice.APE, na.rm=TRUE)*100) %>%
+  kbl(col.name=c('Mean Absolute Error','Mean Absolute Percentage Error')) %>%
+  kable_styling( bootstrap_options = c("striped", "hover", "condensed")) %>%
+  footnote(general_title = "\n", general = "Table 2")  
+```
+
+
+```{r}
+trainingmodel.sp.m %>%
+  dplyr::select(SalePrice.Predict, sale_price) %>%
+  ggplot(aes(sale_price, SalePrice.Predict)) +
+  geom_point(color = "#c44536", size = 0.3) +
+  stat_smooth(aes(sale_price, sale_price), 
+             method = "lm", se = FALSE, size = 1, colour="#197278") + 
+  stat_smooth(aes(SalePrice.Predict, sale_price), 
+              method = "lm", se = FALSE, size = 1, colour="black") +
+  labs(title="Predicted Sale Price as a Function of Observed Price",
+       subtitle="Green line represents a perfect prediction; dark green line represents prediction",
+       x = "Sale Price",
+       y = "Predict Price") +
+    theme_light() +   
+theme(plot.subtitle = element_text(size = 9,face = "italic"),
+        plot.title = element_text(size = 12, face = "bold"), 
+        axis.text.x=element_text(size=6),
+        axis.text.y=element_text(size=6), 
+        axis.title=element_text(size=8))
+```
